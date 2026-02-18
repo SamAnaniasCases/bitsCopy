@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,18 +18,146 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
-import { attendanceRecords, branches, departments } from '@/lib/mock-data'
+
+// Define interfaces for backend data
+interface AttendanceRecord {
+  id: number
+  date: string
+  checkInTime: string
+  checkOutTime: string | null
+  status: 'present' | 'late' | 'absent' | 'incomplete'
+  checkInTimePH: string
+  checkOutTimePH: string | null
+  employee: {
+    id: number
+    firstName: string
+    lastName: string
+    employeeNumber: string | null
+    department: string | null
+    position: string | null
+    branch: string | null
+  }
+}
+
+interface ProcessedRecord {
+  id: number
+  employeeName: string
+  department: string
+  branch: string
+  date: string
+  checkIn: string
+  checkOut: string
+  hours: number
+  overtime: number
+  undertime: number
+  status: string
+}
 
 export default function AttendancePage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('all')
   const [selectedBranch, setSelectedBranch] = useState('all')
   const [selectedDept, setSelectedDept] = useState('all')
-  const [attendanceDate, setAttendanceDate] = useState('2024-01-15')
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0])
   const [currentPage, setCurrentPage] = useState(1)
   const rowsPerPage = 10
 
-  const filteredRecords = attendanceRecords.filter(record => {
+  const [records, setRecords] = useState<ProcessedRecord[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [branches, setBranches] = useState<string[]>([])
+  const [departments, setDepartments] = useState<string[]>([])
+
+  useEffect(() => {
+    const fetchAttendance = async () => {
+      setIsLoading(true)
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        if (!token) {
+          // Redirect to login handled by protected route or global middleware usually
+          return
+        }
+
+        const queryParams = new URLSearchParams({
+          startDate: attendanceDate,
+          endDate: attendanceDate
+        })
+
+        const response = await fetch(`http://localhost:3001/api/attendance?${queryParams}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (!response.ok) throw new Error('Failed to fetch attendance')
+
+        const data = await response.json()
+
+        if (data.success) {
+          const rawRecords: AttendanceRecord[] = data.data
+
+          // Extract unique branches and departments for filters
+          const uniqueBranches = Array.from(new Set(rawRecords.map(r => r.employee.branch).filter(Boolean) as string[]))
+          const uniqueDepts = Array.from(new Set(rawRecords.map(r => r.employee.department).filter(Boolean) as string[]))
+          setBranches(uniqueBranches)
+          setDepartments(uniqueDepts)
+
+          // Process records
+          const processed = rawRecords.map(record => {
+            const checkInDate = new Date(record.checkInTime)
+            const checkOutDate = record.checkOutTime ? new Date(record.checkOutTime) : null
+
+            let hours = 0
+            let overtime = 0
+            let undertime = 0
+
+            if (checkOutDate) {
+              const diffMs = checkOutDate.getTime() - checkInDate.getTime()
+              hours = diffMs / (1000 * 60 * 60)
+
+              // Simple logic: 8 hours work + 1 hour break = 9 hours total time at work? 
+              // Or just raw work hours. Let's assume raw work hours for now.
+              // If work hours > 8 -> Overtime
+              // If work hours < 8 and status is present/late -> Undertime
+
+              if (hours > 9) { // Assuming 1 hour break is included in the duration, providing 1 hour buffer
+                overtime = hours - 9
+              } else if (hours < 8 && record.status !== 'absent') {
+                undertime = 8 - hours
+              }
+            }
+
+            // Format times for display using PH time from backend or local formatting
+            // Backend sends PH formatted strings, let's use them or format locally
+            // Using backend provided PH time strings is easier
+
+            return {
+              id: record.id,
+              employeeName: `${record.employee.firstName} ${record.employee.lastName}`,
+              department: record.employee.department || 'Unassigned',
+              branch: record.employee.branch || 'Unassigned',
+              date: new Date(record.date).toLocaleDateString(),
+              checkIn: record.checkInTimePH.split(', ')[1], // Extract time part
+              checkOut: record.checkOutTimePH ? record.checkOutTimePH.split(', ')[1] : '-',
+              hours: hours,
+              overtime: overtime > 0 ? overtime : 0,
+              undertime: undertime > 0 ? undertime : 0,
+              status: record.status
+            }
+          })
+
+          setRecords(processed)
+        }
+      } catch (error) {
+        console.error('Error fetching attendance:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchAttendance()
+  }, [attendanceDate])
+
+  const filteredRecords = records.filter(record => {
     const matchesSearch = record.employeeName.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = selectedStatus === 'all' || record.status === selectedStatus
     const matchesBranch = selectedBranch === 'all' || record.branch === selectedBranch
@@ -47,7 +175,7 @@ export default function AttendancePage() {
     totalPresent: filteredRecords.filter(r => r.status === 'present').length,
     totalAbsent: filteredRecords.filter(r => r.status === 'absent').length,
     totalLate: filteredRecords.filter(r => r.status === 'late').length,
-    avgHours: filteredRecords.length > 0
+    avgHours: filteredRecords.some(r => r.hours > 0)
       ? (filteredRecords.filter(r => r.hours > 0).reduce((sum, r) => sum + r.hours, 0) / filteredRecords.filter(r => r.hours > 0).length).toFixed(1)
       : '0',
     totalOvertime: filteredRecords.reduce((sum, r) => sum + r.overtime, 0).toFixed(1),
@@ -78,6 +206,19 @@ export default function AttendancePage() {
     link.download = `Attendance_${branchLabel}_${attendanceDate}.csv`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  if (isLoading && records.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-primary rounded-full animate-spin mb-4">
+            <div className="w-8 h-8 bg-background rounded-full"></div>
+          </div>
+          <p className="text-muted-foreground">Loading attendance records...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -222,6 +363,7 @@ export default function AttendancePage() {
                   <SelectItem value="present">Present</SelectItem>
                   <SelectItem value="late">Late</SelectItem>
                   <SelectItem value="absent">Absent</SelectItem>
+                  <SelectItem value="incomplete">Incomplete</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -300,6 +442,13 @@ export default function AttendancePage() {
                   </td>
                 </tr>
               ))}
+              {paginatedRecords.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                    No attendance records found for this date.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -18,40 +18,84 @@ import {
   FileText,
   CalendarDays
 } from 'lucide-react'
-import {
-  employees,
-  getEmployeeStats,
-  getAttendanceStats,
-  getDepartmentBreakdown,
-  getWeeklyTrend,
-  getRecentActivity
-} from '@/lib/mock-data'
 
-// Pre-compute all data from shared source
-const empStats = getEmployeeStats()
-const attStats = getAttendanceStats()
-const deptBreakdown = getDepartmentBreakdown()
-const weeklyTrend = getWeeklyTrend()
-const recentActivity = getRecentActivity()
-const attendanceRate = employees.length > 0
-  ? Math.round(((attStats.totalPresent + attStats.totalLate) / employees.length) * 100)
-  : 0
+// Define interfaces for dashboard data
+interface DashboardStats {
+  employees: {
+    total: number
+    active: number
+  }
+  attendance: {
+    totalPresent: number
+    totalLate: number
+    totalAbsent: number
+    totalOvertime: number
+    totalUndertime: number
+  }
+  departments: Array<{
+    department: string
+    employeeCount: number
+    attendanceRate: number
+  }>
+  weeklyTrend: Array<{
+    day: string
+    present: number
+    late: number
+    absent: number
+  }>
+  recentActivity: Array<{
+    id: number
+    employee: string
+    department: string
+    action: string
+    time: string
+    status: 'on-time' | 'late' | 'absent'
+  }>
+}
 
 export default function Dashboard() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
+  const [stats, setStats] = useState<DashboardStats | null>(null)
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' && localStorage.getItem('token')
-    const employee = typeof window !== 'undefined' && localStorage.getItem('employee')
-    if (!token || !employee) {
-      router.replace('/login')
-    } else {
-      setIsLoading(false)
+    const fetchDashboardStats = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        if (!token) {
+          router.replace('/login')
+          return
+        }
+
+        const response = await fetch('http://localhost:3001/api/dashboard/stats', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            router.replace('/login')
+            return
+          }
+          throw new Error('Failed to fetch dashboard stats')
+        }
+
+        const data = await response.json()
+        if (data.success) {
+          setStats(data.stats)
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error)
+      } finally {
+        setIsLoading(false)
+      }
     }
+
+    fetchDashboardStats()
   }, [router])
 
-  if (isLoading) {
+  if (isLoading || !stats) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -64,6 +108,13 @@ export default function Dashboard() {
     )
   }
 
+  // Destructure stats for easier usage
+  const { employees: empStats, attendance: attStats, departments: deptBreakdown, weeklyTrend, recentActivity } = stats
+
+  const attendanceRate = empStats.total > 0
+    ? Math.round(((attStats.totalPresent + attStats.totalLate) / empStats.total) * 100)
+    : 0
+
   // Color palette for department bars
   const deptColors: Record<string, string> = {
     Engineering: '#6366f1',
@@ -72,6 +123,7 @@ export default function Dashboard() {
     Finance: '#fbbf24',
     Marketing: '#60a5fa',
     Operations: '#a78bfa',
+    Unassigned: '#9ca3af'
   }
 
   return (

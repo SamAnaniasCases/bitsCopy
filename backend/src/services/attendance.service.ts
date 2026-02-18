@@ -268,7 +268,8 @@ export const getAttendanceRecords = async (filters: AttendanceFilters = {}) => {
                     lastName: true,
                     employeeNumber: true,
                     department: true,
-                    position: true
+                    position: true,
+                    branch: true
                 }
             }
         },

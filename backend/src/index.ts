@@ -8,6 +8,7 @@ import { prisma } from './lib/prisma';
 import attendanceRoutes from './routes/attendance_routes';
 import authRoutes from './routes/auth_routes';
 import employeeRoutes from './routes/employee_routes';
+import dashboardRoutes from './routes/dashboard_routes';
 import { startCronJobs } from './lib/cronJobs';
 import { repairMissingCheckouts } from './services/attendance.service';
 
@@ -28,6 +29,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/employees', employeeRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });

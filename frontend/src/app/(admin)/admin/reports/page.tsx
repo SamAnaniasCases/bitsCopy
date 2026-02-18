@@ -1,59 +1,182 @@
-"use client"
-import React, { useState } from 'react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+'use client'
+
+import React, { useState, useEffect } from 'react'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import {
   Download,
-  Calendar,
   Search,
   ChevronRight,
   FileText,
   Users,
   Clock,
   TrendingUp,
-  ChevronLeft,
-  Building2
-} from 'lucide-react';
-import { branches, departments, getReportData } from '@/lib/mock-data';
+  ChevronLeft
+} from 'lucide-react'
 
-const mockReportData = getReportData();
+// Define interfaces
+interface Employee {
+  id: number
+  firstName: string
+  lastName: string
+  department: string | null
+  branch: string | null
+  position: string | null
+  status: string
+}
+
+interface AttendanceRecord {
+  id: number
+  date: string
+  checkInTime: string
+  checkOutTime: string | null
+  status: 'present' | 'late' | 'absent' | 'incomplete'
+  employee: {
+    id: number
+  }
+}
+
+interface ReportRow {
+  id: number
+  name: string
+  department: string
+  branch: string
+  totalDays: number
+  present: number
+  late: number
+  absent: number
+  totalHours: number
+}
 
 export default function ReportsPage() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDept, setSelectedDept] = useState('all');
-  const [selectedBranch, setSelectedBranch] = useState('all');
-  const [startDate, setStartDate] = useState('2026-01-01');
-  const [endDate, setEndDate] = useState('2026-01-30');
-  const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 10;
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedDept, setSelectedDept] = useState('all')
+  const [selectedBranch, setSelectedBranch] = useState('all')
 
-  const filteredData = mockReportData.filter(emp => {
-    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDept = selectedDept === 'all' || emp.department === selectedDept;
-    const matchesBranch = selectedBranch === 'all' || emp.branch === selectedBranch;
-    return matchesSearch && matchesDept && matchesBranch;
-  });
+  // Default to current month
+  const now = new Date()
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
 
-  const totalPages = Math.ceil(filteredData.length / rowsPerPage) || 1;
+  const [startDate, setStartDate] = useState(firstDay.toISOString().split('T')[0])
+  const [endDate, setEndDate] = useState(lastDay.toISOString().split('T')[0])
+
+  const [currentPage, setCurrentPage] = useState(1)
+  const rowsPerPage = 10
+
+  const [reportData, setReportData] = useState<ReportRow[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [branches, setBranches] = useState<string[]>([])
+  const [departments, setDepartments] = useState<string[]>([])
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true)
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        if (!token) return
+
+        // 1. Fetch Employees
+        const empResponse = await fetch('http://localhost:3001/api/employees', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        const empResult = await empResponse.json()
+        const employees: Employee[] = empResult.success ? empResult.data : []
+
+        // Extract Filters
+        const uniqueBranches = Array.from(new Set(employees.map(e => e.branch).filter(Boolean) as string[])) // Type assertion for filter(Boolean)
+        const uniqueDepts = Array.from(new Set(employees.map(e => e.department).filter(Boolean) as string[]))
+        setBranches(uniqueBranches)
+        setDepartments(uniqueDepts)
+
+        // 2. Fetch Attendance for the range
+        const queryParams = new URLSearchParams({ startDate, endDate })
+        const attResponse = await fetch(`http://localhost:3001/api/attendance?${queryParams}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        const attResult = await attResponse.json()
+        const attendance: AttendanceRecord[] = attResult.success ? attResult.data : []
+
+        // 3. Process Data
+        // Calculate total days in range (inclusive)
+        const start = new Date(startDate)
+        const end = new Date(endDate)
+        const diffTime = Math.abs(end.getTime() - start.getTime())
+        const totalDaysInRange = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+
+        const processedData: ReportRow[] = employees.map(emp => {
+          const empRecords = attendance.filter(r => r.employee.id === emp.id)
+
+          const presentCount = empRecords.filter(r => r.status === 'present' || r.status === 'late').length
+          const lateCount = empRecords.filter(r => r.status === 'late').length
+          const absentCount = empRecords.filter(r => r.status === 'absent').length
+
+          // Calculate detailed hours
+          let totalHours = 0
+          empRecords.forEach(r => {
+            if (r.checkOutTime) {
+              const checkIn = new Date(r.checkInTime)
+              const checkOut = new Date(r.checkOutTime)
+              const duration = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60)
+              totalHours += duration
+            }
+          })
+
+          return {
+            id: emp.id,
+            name: `${emp.firstName} ${emp.lastName}`,
+            department: emp.department || 'Unassigned',
+            branch: emp.branch || 'Unassigned',
+            totalDays: totalDaysInRange, // Simple duration for now
+            present: presentCount,
+            late: lateCount,
+            absent: absentCount,
+            totalHours: totalHours
+          }
+        })
+
+        setReportData(processedData)
+
+      } catch (error) {
+        console.error('Error generating report:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [startDate, endDate]) // Re-run when date range changes
+
+  // Filter Logic
+  const filteredData = reportData.filter(emp => {
+    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesDept = selectedDept === 'all' || emp.department === selectedDept
+    const matchesBranch = selectedBranch === 'all' || emp.branch === selectedBranch
+    return matchesSearch && matchesDept && matchesBranch
+  })
+
+  // Pagination
+  const totalPages = Math.ceil(filteredData.length / rowsPerPage) || 1
   const paginatedData = filteredData.slice(
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage
-  );
+  )
 
   // Summary stats
-  const totalRecords = filteredData.length;
-  const avgAttendance = filteredData.length > 0
-    ? Math.round(filteredData.reduce((sum, e) => sum + (e.present / e.totalDays) * 100, 0) / filteredData.length)
-    : 0;
-  const totalLate = filteredData.reduce((sum, e) => sum + e.late, 0);
-  const totalAbsent = filteredData.reduce((sum, e) => sum + e.absent, 0);
-  const totalHoursRendered = filteredData.reduce((sum, e) => sum + e.totalHours, 0);
+  const totalRecords = filteredData.length
+  // Avoid division by zero
+  const avgAttendance = filteredData.length > 0 && filteredData.some(e => e.totalDays > 0)
+    ? Math.round(filteredData.reduce((sum, e) => sum + ((e.present / Math.max(e.totalDays, 1)) * 100), 0) / filteredData.length)
+    : 0
+
+  const totalLate = filteredData.reduce((sum, e) => sum + e.late, 0)
+  const totalHoursRendered = filteredData.reduce((sum, e) => sum + e.totalHours, 0)
 
   const handleExport = () => {
-    const headers = ['Employee', 'Department', 'Branch', 'Total Days', 'Present', 'Late', 'Absent', 'Total Hours'];
+    const headers = ['Employee', 'Department', 'Branch', 'Total Days', 'Present', 'Late', 'Absent', 'Total Hours']
     const rows = filteredData.map(e => [
       e.name,
       e.department,
@@ -63,29 +186,41 @@ export default function ReportsPage() {
       e.late,
       e.absent,
       e.totalHours.toFixed(2)
-    ]);
+    ])
 
     // Append summary row
-    rows.push([]);
-    rows.push(['--- SUMMARY ---']);
-    rows.push(['Total Employees', totalRecords]);
-    rows.push(['Avg. Attendance', `${avgAttendance}%`]);
-    rows.push(['Total Late', totalLate]);
-    rows.push(['Total Absent', totalAbsent]);
-    rows.push(['Total Hours', totalHoursRendered.toFixed(2)]);
+    rows.push([])
+    rows.push(['--- SUMMARY ---'])
+    rows.push(['Total Employees', totalRecords])
+    rows.push(['Avg. Attendance', `${avgAttendance}%`])
+    rows.push(['Total Late', totalLate])
+    rows.push(['Total Hours', totalHoursRendered.toFixed(2)])
 
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
 
-    const branchLabel = selectedBranch === 'all' ? 'All-Branches' : selectedBranch.replace(/\s+/g, '-');
-    const deptLabel = selectedDept === 'all' ? 'All-Depts' : selectedDept;
-    link.download = `Report_${branchLabel}_${deptLabel}_${startDate}_to_${endDate}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+    const branchLabel = selectedBranch === 'all' ? 'All-Branches' : selectedBranch.replace(/\s+/g, '-')
+    const deptLabel = selectedDept === 'all' ? 'All-Depts' : selectedDept
+    link.download = `Report_${branchLabel}_${deptLabel}_${startDate}_to_${endDate}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  if (isLoading && reportData.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-primary rounded-full animate-spin mb-4">
+            <div className="w-8 h-8 bg-background rounded-full"></div>
+          </div>
+          <p className="text-muted-foreground">Generating report...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -143,7 +278,7 @@ export default function ReportsPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-muted-foreground text-xs sm:text-sm font-medium">Hours Rendered</p>
-              <p className="text-2xl sm:text-3xl font-bold text-foreground mt-1 sm:mt-2">{totalHoursRendered.toLocaleString()}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-foreground mt-1 sm:mt-2">{totalHoursRendered.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
             </div>
             <div className="bg-primary/20 p-2 sm:p-3 rounded-lg">
               <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-primary" />
@@ -280,6 +415,13 @@ export default function ReportsPage() {
                   </td>
                 </tr>
               ))}
+              {paginatedData.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                    No records found for the selected period.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -328,5 +470,5 @@ export default function ReportsPage() {
         </div>
       </Card>
     </div>
-  );
+  )
 }

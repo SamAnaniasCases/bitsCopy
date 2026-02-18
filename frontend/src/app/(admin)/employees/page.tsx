@@ -1,8 +1,6 @@
 'use client'
 
-import React from "react"
-
-import { useState } from 'react'
+import React, { useState, useEffect } from "react"
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,10 +10,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Search, Plus, Edit2, Trash2, Eye, ChevronLeft, ChevronRight, Upload } from 'lucide-react'
-import { employees as mockEmployees, departments, branches, type Employee } from '@/lib/mock-data'
+
+// Define Employee interface locally to match backend and frontend needs
+interface Employee {
+  id: number
+  name: string
+  contactNumber: string
+  department: string
+  position: string
+  branch: string
+  status: 'active' | 'inactive' | 'terminated'
+  joinDate: string
+  bio?: string
+}
 
 export default function EmployeesPage() {
-  const [employees, setEmployees] = useState(mockEmployees)
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [departments, setDepartments] = useState<string[]>([])
+  const [branches, setBranches] = useState<string[]>([])
+
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedDept, setSelectedDept] = useState<string>('all')
   const [selectedBranch, setSelectedBranch] = useState<string>('all')
@@ -31,6 +45,52 @@ export default function EmployeesPage() {
     branch: '',
     bio: ''
   })
+
+  // Fetch employees from backend
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      setIsLoading(true)
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        const response = await fetch('http://localhost:3001/api/employees', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (!response.ok) throw new Error('Failed to fetch')
+
+        const data = await response.json()
+        if (data.success) {
+          const mappedEmployees: Employee[] = data.employees.map((emp: any) => ({
+            id: emp.id,
+            name: `${emp.firstName} ${emp.lastName}`,
+            contactNumber: emp.contactNumber || 'N/A',
+            department: emp.department || 'Unassigned',
+            position: emp.position || 'N/A',
+            branch: emp.branch || 'Unassigned',
+            status: emp.employmentStatus ? emp.employmentStatus.toLowerCase() : 'active',
+            joinDate: emp.hireDate ? new Date(emp.hireDate).toISOString().split('T')[0] : 'N/A',
+            bio: ''
+          }))
+
+          setEmployees(mappedEmployees)
+
+          // Extract unique departments and branches for filters
+          const uniqueDepts = Array.from(new Set(mappedEmployees.map(e => e.department).filter(d => d && d !== 'Unassigned'))) as string[]
+          const uniqueBranches = Array.from(new Set(mappedEmployees.map(e => e.branch).filter(b => b && b !== 'Unassigned'))) as string[]
+
+          setDepartments(uniqueDepts.sort())
+          setBranches(uniqueBranches.sort())
+        }
+      } catch (error) {
+        console.error('Error fetching employees:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchEmployees()
+  }, [])
 
   const [currentPage, setCurrentPage] = useState(1)
   const rowsPerPage = 10
@@ -50,6 +110,7 @@ export default function EmployeesPage() {
   )
 
   const handleAddEmployee = () => {
+    // This is a placeholder for now, actual implementation would need a POST request
     if (newEmployee.name && newEmployee.contactNumber && newEmployee.department && newEmployee.position && newEmployee.branch) {
       const employee = {
         id: employees.length + 1,
@@ -64,7 +125,16 @@ export default function EmployeesPage() {
   }
 
   const deleteEmployee = (id: number) => {
+    // Placeholder for delete
     setEmployees(employees.filter(emp => emp.id !== id))
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
   }
 
   return (
