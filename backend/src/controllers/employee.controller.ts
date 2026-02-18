@@ -22,9 +22,9 @@ export const getAllEmployees = async (req: Request, res: Response) => {
                 employmentStatus: true,
                 createdAt: true,
             },
-            // Order by ID initially to keep consistent secondary sorting
+            // Order by ZK ID ascending
             orderBy: {
-                id: 'asc',
+                zkId: 'asc',
             },
         });
 
@@ -44,7 +44,7 @@ export const getAllEmployees = async (req: Request, res: Response) => {
 
         res.json({
             success: true,
-            employees: sortedEmployees,
+            employees: employees,
         });
     } catch (error) {
         console.error('Error fetching employees:', error);
