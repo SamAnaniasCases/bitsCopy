@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root
     ports:
-      - "5432:5432"
+      - "5009:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -36,7 +36,7 @@ services:
       - /app/dist
     command: npm run dev:watch
     ports:
-      - "3001:3001"
+      - "4009:3001"
     depends_on:
       - postgres
     networks:
@@ -49,7 +49,7 @@ services:
     container_name: bits_frontend
     environment:
       NODE_ENV: development
-      NEXT_PUBLIC_API_URL: http://127.0.0.1:3001/api
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4009/api
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
     volumes:
@@ -58,7 +58,7 @@ services:
       - /app/.next
     command: npm run dev -- --webpack
     ports:
-      - "3000:3000"
+      - "3009:3000"
     depends_on:
       - backend
     networks:
@@ -85,7 +85,7 @@ services:
 volumes:
   postgres_data:
     external: true
-    name: project_postgres_data
+    name: scases_postgres_data
 
 networks:
   bits_network:
