@@ -1,13 +1,13 @@
+@@ -1,9 +1,12 @@
 FROM node:20-alpine
 
-WORKDIR /src
+WORKDIR /app
 
-COPY ..
+COPY package.json package-lock.json* ./
+
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 RUN npm install
 
-EXPOSE 3000
-
-ENV PORT 3000
-
-CMD ["npm", "run", "dev"]
+COPY . .
