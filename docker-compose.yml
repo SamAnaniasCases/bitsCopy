@@ -46,7 +46,7 @@ services:
     container_name: bits_frontend
     environment:
       NODE_ENV: development
-      NEXT_PUBLIC_API_URL: http://127.0.0.1:4009/api
+      NEXT_PUBLIC_API_URL: http://10.10.0.98:4009/api
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
 
