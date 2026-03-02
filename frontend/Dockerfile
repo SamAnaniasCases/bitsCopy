@@ -1,8 +1,8 @@
 FROM node:20-alpine
 
-WORKDIR /app
+WORKDIR /src
 
-COPY package.json package-lock.json* ./
+COPY ..
 
 RUN npm install
 
