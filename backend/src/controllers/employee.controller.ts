@@ -147,6 +147,43 @@ export const deleteEmployee = async (req: Request, res: Response) => {
     }
 };
 
+// DELETE /api/employees/:id/permanent - Permanently delete an INACTIVE employee
+export const permanentDeleteEmployee = async (req: Request, res: Response) => {
+    try {
+        const employeeId = parseInt(req.params.id);
+
+        if (isNaN(employeeId)) {
+            return res.status(400).json({ success: false, message: 'Invalid employee ID' });
+        }
+
+        const employee = await prisma.employee.findUnique({
+            where: { id: employeeId },
+            select: { id: true, firstName: true, lastName: true, employmentStatus: true },
+        });
+
+        if (!employee) {
+            return res.status(404).json({ success: false, message: 'Employee not found' });
+        }
+
+        if (employee.employmentStatus !== 'INACTIVE') {
+            return res.status(400).json({
+                success: false,
+                message: 'Only inactive employees can be permanently deleted. Move them to inactive first.'
+            });
+        }
+
+        await prisma.employee.delete({ where: { id: employeeId } });
+
+        return res.json({
+            success: true,
+            message: `Employee "${employee.firstName} ${employee.lastName}" permanently deleted`,
+        });
+    } catch (error) {
+        console.error('Error permanently deleting employee:', error);
+        return res.status(500).json({ success: false, message: 'Failed to permanently delete employee' });
+    }
+};
+
 // PATCH /api/employees/:id/reactivate - Reactivate inactive employee
 export const reactivateEmployee = async (req: Request, res: Response) => {
     try {

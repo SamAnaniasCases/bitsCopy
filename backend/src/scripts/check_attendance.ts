@@ -12,7 +12,7 @@ async function main() {
         const records = await prisma.attendance.findMany({
             take: 5,
             orderBy: { date: 'desc' },
-            include: { employee: true }
+            include: { Employee: true }
         });
         console.log('Last 5 records:', JSON.stringify(records, null, 2));
     } else {

@@ -108,6 +108,13 @@ model Shift {
   Employee  Employee[]
 }
 
+model Branch {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime
+}
+
 enum EmploymentStatus {
   ACTIVE
   INACTIVE

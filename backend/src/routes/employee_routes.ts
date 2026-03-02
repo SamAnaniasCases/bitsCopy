@@ -5,7 +5,8 @@ import {
     deleteEmployee,
     reactivateEmployee,
     createEmployee,
-    enrollEmployeeFingerprintController
+    enrollEmployeeFingerprintController,
+    permanentDeleteEmployee
 } from '../controllers/employee.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { adminOrHR } from '../middleware/role.middleware';
@@ -149,6 +150,9 @@ router.post('/:id/enroll-fingerprint', validate(enrollFingerprintValidator), enr
 
 // DELETE /api/employees/:id - Soft delete (mark as inactive)
 router.delete('/:id', deleteEmployee);
+
+// DELETE /api/employees/:id/permanent - Hard delete (only INACTIVE employees)
+router.delete('/:id/permanent', permanentDeleteEmployee);
 
 // PATCH /api/employees/:id/reactivate - Reactivate inactive employee
 router.patch('/:id/reactivate', reactivateEmployee);
