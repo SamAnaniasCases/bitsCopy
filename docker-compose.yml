@@ -30,10 +30,7 @@ services:
       DB_USER: root
       DB_PASSWORD: root
       JWT_SECRET: your-secret-key-change-this-in-production
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-      - /app/dist
+
     command: npm run dev:watch
     ports:
       - "4009:3001"
@@ -52,10 +49,7 @@ services:
       NEXT_PUBLIC_API_URL: http://127.0.0.1:4009/api
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
+
     command: npm run dev -- --webpack
     ports:
       - "3009:3000"
