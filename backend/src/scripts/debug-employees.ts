@@ -1,38 +1,32 @@
 
+import jwt from 'jsonwebtoken';
+
 async function main() {
-    const loginUrl = 'http://localhost:3001/api/auth/login';
     const employeesUrl = 'http://localhost:3001/api/employees';
+    const secret = 'your-secret-key-change-this-in-production';
 
     try {
-        console.log('Logging in...');
-        const loginRes = await fetch(loginUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: 'admin@avegabros.com', password: 'admin123' })
-        });
+        console.log('Synthesizing token...');
+        const token = jwt.sign({ id: 1, email: 'admin@bits.com', role: 'ADMIN' }, secret, { expiresIn: '1h' });
 
-        const loginData = await loginRes.json();
-        if (!loginData.success) {
-            console.error('Login failed:', loginData);
-            return;
-        }
-        const token = loginData.accessToken;
-
-        console.log('Fetching employees...');
+        console.log('Fetching employees with synthesized token...');
         const res = await fetch(employeesUrl, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        const data = await res.json();
-        console.log('API Response Success:', data.success);
-        if (data.success) {
-            console.log('Employee count:', data.employees?.length);
-            if (data.employees?.length > 0) {
-                console.log('First employee sample:', JSON.stringify(data.employees[0], null, 2));
-            }
+        console.log('Response Status:', res.status, res.statusText);
+
+        const contentType = res.headers.get('content-type');
+        console.log('Content-Type:', contentType);
+
+        if (contentType && contentType.includes('application/json')) {
+            const data = await res.json();
+            console.log('API Response:', JSON.stringify(data, null, 2));
         } else {
-            console.log('API Error:', data.message);
+            const txt = await res.text();
+            console.log('API Response (Text):', txt);
         }
+
     } catch (error) {
         console.error('Script error:', error);
     }
