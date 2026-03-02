@@ -1,4 +1,3 @@
-@@ -1,9 +1,12 @@
 FROM node:20-alpine
 
 WORKDIR /app
